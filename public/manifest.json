@@ -1,0 +1,24 @@
+{
+  "short_name": "Alquimia",
+  "name": "Alquimia \u00b7 Productora Gastron\u00f3mica",
+  "description": "App de gesti\u00f3n para Alquimia",
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#080808",
+  "background_color": "#080808"
+}
