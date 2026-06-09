@@ -1,10 +1,24 @@
 import React from "react";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { loadDB, saveDB } from "./firebase";
+
+// PDF generation
+const generatePDF = (q) => {
+  const el = document.getElementById("quote-pdf-" + q.id);
+  if (!el) return;
+  const opt = {
+    margin:       [8, 8, 8, 8],
+    filename:     "Cotizacion-Alquimia-" + (q.client||"cliente").replace(/\s+/g,"-") + ".pdf",
+    image:        { type:"jpeg", quality:0.98 },
+    html2canvas:  { scale:2, backgroundColor:"#080808", useCORS:true },
+    jsPDF:        { unit:"mm", format:"a4", orientation:"portrait" },
+    pagebreak:    { mode:"avoid-all" }
+  };
+  window.html2pdf().set(opt).from(el).save();
+};
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 const KEYS = { ev:"alq_ev", ta:"alq_ta", fi:"alq_fi", me:"alq_me", no:"alq_no", qu:"alq_qu", inv:"alq_inv", ins:"alq_ins" };
-const loadDB = async k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
-const saveDB = async (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const G = { gold:"#C9A84C", burg:"#8B1A2E", dark:"#080808", card:"#101010", border:"#1c1c1c", text:"#ede5d5", muted:"#52483a", dim:"#2a2218" };
@@ -340,6 +354,94 @@ function InventarioScreen({inventario,setInventario,insumos,setInsumos}) {
   );
 }
 
+// ── QuotePDFContent (for PDF export) ─────────────────────────────────────────
+function QuotePDFContent({q}) {
+  const gold = "#C9A84C";
+  const s = (style) => style;
+  return (
+    <div style={{background:"#080808",color:"#ede5d5",fontFamily:"Georgia,serif",padding:"16px"}}>
+      {/* Header */}
+      <div style={{textAlign:"center",marginBottom:20,paddingBottom:16,borderBottom:"1px solid #2a2218"}}>
+        <div style={{fontSize:28,color:gold,marginBottom:4}}>☿</div>
+        <div style={{fontSize:14,letterSpacing:6,color:gold,textTransform:"uppercase"}}>Alquimia</div>
+        <div style={{fontSize:9,letterSpacing:3,color:"#52483a",textTransform:"uppercase",marginTop:4}}>Productora Gastronómica · Propuesta</div>
+      </div>
+
+      {/* Client info */}
+      <div style={{marginBottom:16,paddingBottom:14,borderBottom:"1px solid #1c1c1c"}}>
+        {q.client&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:10,color:"#52483a",letterSpacing:2,textTransform:"uppercase"}}>Cliente</span><span style={{fontSize:13,color:"#ede5d5"}}>{q.client}</span></div>}
+        {q.date&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:10,color:"#52483a",letterSpacing:2,textTransform:"uppercase"}}>Fecha</span><span style={{fontSize:13,color:"#ede5d5"}}>{new Date(q.date+"T12:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"long",year:"numeric"})}</span></div>}
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,color:"#52483a",letterSpacing:2,textTransform:"uppercase"}}>Invitados</span><span style={{fontSize:13,color:"#ede5d5"}}>{q.guests} personas</span></div>
+      </div>
+
+      {/* Services */}
+      <div style={{marginBottom:16,paddingBottom:14,borderBottom:"1px solid #1c1c1c"}}>
+        <div style={{fontSize:9,letterSpacing:3,color:"#52483a",textTransform:"uppercase",marginBottom:10}}>Gastronomía</div>
+        {(q.servicios||[]).map(s=>(
+          <div key={s} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,paddingLeft:10}}>
+            <span style={{fontSize:14}}>{SERVICIOS[s]?.icon}</span>
+            <span style={{fontSize:12,color:"#ede5d5"}}>{SERVICIOS[s]?.label}</span>
+          </div>
+        ))}
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:8,paddingTop:8,borderTop:"1px solid #1c1c1c"}}>
+          <span style={{fontSize:10,color:"#52483a"}}>Precio / persona</span>
+          <span style={{fontSize:13,color:gold}}>{("$"+Number(q.precioPP||0).toLocaleString("es-CL"))}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+          <span style={{fontSize:10,color:"#52483a"}}>Subtotal gastronomía</span>
+          <span style={{fontSize:13,color:"#ede5d5"}}>{("$"+Number(q.subtotalGastro||0).toLocaleString("es-CL"))}</span>
+        </div>
+      </div>
+
+      {/* Extras */}
+      {q.extras&&q.extras.length>0&&(
+        <div style={{marginBottom:16,paddingBottom:14,borderBottom:"1px solid #1c1c1c"}}>
+          <div style={{fontSize:9,letterSpacing:3,color:"#52483a",textTransform:"uppercase",marginBottom:10}}>Servicios adicionales</div>
+          {q.extras.map(e=>(
+            <div key={e.id} style={{display:"flex",justifyContent:"space-between",marginBottom:5,paddingLeft:10}}>
+              <span style={{fontSize:11,color:"#ede5d5"}}>{e.icon} {e.label}</span>
+              <span style={{fontSize:11,color:"#ede5d5"}}>{("$"+Number(e.price||0).toLocaleString("es-CL"))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Total */}
+      <div style={{background:"#101010",border:"1px solid #1c1c1c",borderRadius:2,padding:"16px",marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:10,letterSpacing:3,color:"#52483a",textTransform:"uppercase"}}>Total</span>
+          <span style={{fontSize:28,color:gold,fontWeight:"bold"}}>{("$"+Number(q.total||0).toLocaleString("es-CL"))}</span>
+        </div>
+        <div style={{borderTop:"1px solid #1c1c1c",paddingTop:12}}>
+          <div style={{fontSize:9,letterSpacing:3,color:"#52483a",textTransform:"uppercase",marginBottom:8}}>Forma de pago</div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:11,color:"#ede5d5"}}>50% al reservar</span>
+            <span style={{fontSize:13,color:"#4a8a4a",fontWeight:"bold"}}>{("$"+Number(q.abono||0).toLocaleString("es-CL"))}</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between"}}>
+            <span style={{fontSize:11,color:"#ede5d5"}}>50% antes del evento</span>
+            <span style={{fontSize:13,color:"#ede5d5"}}>{("$"+Number(q.saldo||0).toLocaleString("es-CL"))}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Note */}
+      {q.note&&(
+        <div style={{marginBottom:16,padding:"12px",background:"#101010",border:"1px solid #1c1c1c",borderRadius:2}}>
+          <div style={{fontSize:9,letterSpacing:3,color:"#52483a",textTransform:"uppercase",marginBottom:6}}>Notas</div>
+          <div style={{fontSize:11,color:"#ede5d5",lineHeight:1.6}}>{q.note}</div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{textAlign:"center",paddingTop:16,borderTop:"1px solid #1c1c1c"}}>
+        <div style={{fontSize:10,color:"#52483a",letterSpacing:2}}>Experiencia sensorial completa · Los 5 sentidos</div>
+        <div style={{fontSize:9,color:"#2a2218",marginTop:4,letterSpacing:1}}>alquimia.cl · Productora Gastronómica</div>
+      </div>
+    </div>
+  );
+}
+
 // ── QuoteCard ─────────────────────────────────────────────────────────────────
 function QuoteCard({q}) {
   return (
@@ -503,8 +605,14 @@ function Cotizador({onSave}) {
   return (
     <div>
       <QuoteCard q={{client,date,guests:gn,servicios:sel,precioPP:pp,subtotalGastro:subG,extras:xOn,extrasTotal:subX,total,abono,saldo,note}}/>
+      {/* Hidden div for PDF generation */}
+      <div id={"quote-pdf-new"} style={{position:"fixed",left:"-9999px",top:0,width:"210mm",background:"#080808",padding:"10mm",fontFamily:"Georgia,serif"}}>
+        <QuotePDFContent q={{client,date,guests:gn,servicios:sel,precioPP:pp,subtotalGastro:subG,extras:xOn,extrasTotal:subX,total,abono,saldo,note,id:"new"}}/>
+      </div>
+
       <div style={{display:"flex",gap:8,margin:"14px 0 8px"}}>
         <button onClick={()=>{navigator.clipboard.writeText(qText);setCopied(true);setTimeout(()=>setCopied(false),2000);}} style={{flex:1,padding:11,background:copied?"rgba(201,168,76,0.15)":G.gold,color:copied?G.gold:G.dark,border:copied?`1px solid ${G.gold}`:"none",borderRadius:2,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"}}>{copied?"✓ Copiado":"Copiar texto"}</button>
+        <button onClick={()=>{const tmp={client,date,guests:gn,servicios:sel,precioPP:pp,subtotalGastro:subG,extras:xOn,extrasTotal:subX,total,abono,saldo,note,id:"new"};generatePDF(tmp);}} style={{padding:"11px 14px",background:"transparent",border:`1px solid ${G.gold}`,color:G.gold,borderRadius:2,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"}}>PDF</button>
         <button onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(qText)}`,"_blank")} style={{padding:"11px 14px",background:"transparent",border:"1px solid #2a4a2a",color:"#4a8a4a",borderRadius:2,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"}}>WA</button>
       </div>
       {!saved?<BtnGold onClick={doSave} disabled={!client}>☿ Guardar cotización</BtnGold>:<div style={{textAlign:"center",padding:12,color:G.gold,fontSize:11,letterSpacing:2}}>✓ Guardada</div>}
@@ -581,7 +689,14 @@ function QuoteDetail({qId,quotes,setQuotes,finances,setFinances,onClose}) {
               <div style={{fontSize:10,color:G.muted,marginTop:4}}>Saldo pendiente: {fmtCLP(q.saldo)}</div>
             </div>
           )}
-          <button onClick={()=>navigator.clipboard.writeText(q.quoteText||"")} style={{width:"100%",padding:11,background:G.gold,color:G.dark,border:"none",borderRadius:2,fontSize:10,letterSpacing:3,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"}}>Copiar cotización</button>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>navigator.clipboard.writeText(q.quoteText||"")} style={{flex:1,padding:11,background:G.gold,color:G.dark,border:"none",borderRadius:2,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"}}>Copiar</button>
+            <button onClick={()=>generatePDF(q)} style={{padding:"11px 16px",background:"transparent",border:`1px solid ${G.gold}`,color:G.gold,borderRadius:2,fontSize:10,letterSpacing:2,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit"}}>PDF</button>
+          </div>
+          {/* Hidden PDF content */}
+          <div id={"quote-pdf-"+q.id} style={{position:"fixed",left:"-9999px",top:0,width:"210mm",background:"#080808",padding:"10mm",fontFamily:"Georgia,serif"}}>
+            <QuotePDFContent q={q}/>
+          </div>
           {confirm==="eliminar"?(
             <div style={{display:"flex",gap:6}}>
               <button onClick={()=>setConfirm(null)} style={{flex:1,padding:"9px",background:"transparent",border:`1px solid ${G.border}`,borderRadius:2,color:G.muted,fontSize:10,cursor:"pointer",fontFamily:"inherit",textTransform:"uppercase"}}>Cancelar</button>
